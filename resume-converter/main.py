@@ -1,12 +1,16 @@
 import os
 import shutil
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import pytesseract
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Inches, Pt
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
@@ -36,6 +40,41 @@ def process_image_with_tesseract(image_path: str) -> str:
         raise HTTPException(status_code=500, detail=f"Tesseract處理失敗: {str(e)}")
 
 
+def create_word_document(text: str) -> Path:
+    """
+    將文本轉換為 Word 文檔
+    """
+    try:
+        # 創建新的 Word 文檔
+        doc = Document()
+
+        # 設置基本樣式
+        style = doc.styles["Normal"]
+        font = style.font
+        font.name = "Arial"
+        font.size = Pt(12)
+
+        # 添加標題
+        heading = doc.add_heading("簡歷內容", 0)
+        heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # 處理文本內容
+        paragraphs = text.split("\n\n")
+        for para in paragraphs:
+            if para.strip():
+                p = doc.add_paragraph()
+                p.add_run(para.strip())
+
+        # 保存文檔
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = UPLOAD_DIR / f"resume_{timestamp}.docx"
+        doc.save(str(output_path))
+
+        return output_path
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Word文檔生成失敗: {str(e)}")
+
+
 @app.post("/api/upload")
 async def upload_file(file: UploadFile):
     """
@@ -55,7 +94,12 @@ async def upload_file(file: UploadFile):
         # 處理圖像
         text_result = process_image_with_tesseract(str(temp_file))
 
-        return JSONResponse({"status": "success", "text": text_result})
+        # 生成 Word 文檔
+        docx_path = create_word_document(text_result)
+
+        return JSONResponse(
+            {"status": "success", "text": text_result, "docx_file": docx_path.name}
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -66,7 +110,23 @@ async def upload_file(file: UploadFile):
             temp_file.unlink()
 
 
-# 掛載靜態文件 - 移到最後
+@app.get("/api/download/{filename}")
+async def download_file(filename: str):
+    """
+    下載生成的 Word 文檔
+    """
+    file_path = UPLOAD_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+# 掛載靜態文件
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":

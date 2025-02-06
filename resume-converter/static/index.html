@@ -37,9 +37,16 @@
         border-radius: 4px;
         cursor: pointer;
         font-size: 16px;
+        margin: 5px;
       }
       .btn:hover {
         background-color: #45a049;
+      }
+      .btn.download {
+        background-color: #2196f3;
+      }
+      .btn.download:hover {
+        background-color: #1976d2;
       }
       #result {
         margin-top: 20px;
@@ -58,6 +65,11 @@
         margin-top: 10px;
         display: none;
       }
+      .actions {
+        margin-top: 20px;
+        text-align: center;
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -72,6 +84,9 @@
       <div class="loading" id="loading">處理中...</div>
       <div class="error" id="error"></div>
       <div id="result"></div>
+      <div class="actions" id="actions">
+        <button class="btn download" id="downloadBtn">下載 Word 文檔</button>
+      </div>
     </div>
 
     <script>
@@ -80,6 +95,10 @@
       const loading = document.getElementById("loading");
       const error = document.getElementById("error");
       const result = document.getElementById("result");
+      const actions = document.getElementById("actions");
+      const downloadBtn = document.getElementById("downloadBtn");
+
+      let currentDocxFile = null;
 
       // 拖放處理
       ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
@@ -131,6 +150,7 @@
         loading.style.display = "block";
         error.style.display = "none";
         result.style.display = "none";
+        actions.style.display = "none";
 
         const formData = new FormData();
         formData.append("file", file);
@@ -147,12 +167,15 @@
 
           const data = await response.json();
 
-          // 顯示結果
+          // 顯示識別結果
           result.style.display = "block";
-          result.innerHTML = `
-                    <h3>識別結果：</h3>
-                    <pre>${data.text}</pre>
-                `;
+          result.innerHTML = `<h3>識別結果：</h3><pre>${data.text}</pre>`;
+
+          // 保存文檔文件名
+          currentDocxFile = data.docx_file;
+
+          // 顯示下載按鈕
+          actions.style.display = "block";
         } catch (err) {
           error.style.display = "block";
           error.textContent = "處理失敗：" + err.message;
@@ -160,6 +183,30 @@
           loading.style.display = "none";
         }
       }
+
+      downloadBtn.addEventListener("click", async () => {
+        if (!currentDocxFile) {
+          return;
+        }
+
+        try {
+          const response = await fetch(`http://localhost:8000/api/download/${currentDocxFile}`);
+          if (!response.ok) throw new Error("下載失敗");
+
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = currentDocxFile;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        } catch (err) {
+          error.style.display = "block";
+          error.textContent = "下載失敗：" + err.message;
+        }
+      });
     </script>
   </body>
 </html>
