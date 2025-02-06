@@ -21,9 +21,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 掛載靜態文件
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
-
 # 創建臨時文件夾
 UPLOAD_DIR = Path("temp_uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -69,7 +66,10 @@ async def upload_file(file: UploadFile):
             temp_file.unlink()
 
 
+# 掛載靜態文件 - 移到最後
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
